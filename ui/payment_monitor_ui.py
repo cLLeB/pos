@@ -15,12 +15,13 @@ from tkinter import ttk
 from ui.login_screen import COLORS
 from modules import payments as payments_mod
 from database.db_setup import get_setting
+from utils.tk_after import SafeAfterMixin
 
 
-class PaymentMonitorUI:
+class PaymentMonitorUI(SafeAfterMixin):
     def __init__(self, parent: tk.Frame):
         self.parent = parent
-        self._auto_refresh_job = None
+        self._init_after_manager(self.parent)
         self._build_ui()
         self._refresh_all()
 
@@ -277,27 +278,23 @@ class PaymentMonitorUI:
             )
 
     def _schedule_auto_refresh(self):
-        if self._auto_refresh_job:
-            try:
-                self.parent.after_cancel(self._auto_refresh_job)
-            except Exception:
-                pass
-            self._auto_refresh_job = None
+        if self._after_is_closing():
+            return
+
+        self._after_cancel("auto_refresh")
 
         if self._auto_refresh_var.get():
-            self._auto_refresh_job = self.parent.after(5000, self._auto_refresh_tick)
+            self._after_schedule("auto_refresh", 5000, self._auto_refresh_tick)
 
     def _auto_refresh_tick(self):
+        if self._after_is_closing():
+            return
+
         try:
             self._refresh_all()
         finally:
             if self._auto_refresh_var.get():
-                self._auto_refresh_job = self.parent.after(5000, self._auto_refresh_tick)
+                self._after_schedule("auto_refresh", 5000, self._auto_refresh_tick)
 
     def _on_destroy(self, _event=None):
-        if self._auto_refresh_job:
-            try:
-                self.parent.after_cancel(self._auto_refresh_job)
-            except Exception:
-                pass
-            self._auto_refresh_job = None
+        self._after_mark_closing()

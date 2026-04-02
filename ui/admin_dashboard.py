@@ -11,19 +11,23 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from modules import auth
 from ui.login_screen import COLORS
+from utils.tk_after import SafeAfterMixin
 
 
-class AdminDashboard:
+class AdminDashboard(SafeAfterMixin):
     # Session timeout: 30 minutes of inactivity → auto-logout
     _TIMEOUT_MS = 30 * 60 * 1000
 
     def __init__(self, root: tk.Tk):
         self.root = root
+        self._is_closing = False
+        self._init_after_manager(self.root)
         user = auth.get_current_user()
         self.root.title(f"POS System — {user['role'].capitalize()} Dashboard ({user['username']})")
         self.root.geometry("1100x680")
         self.root.configure(bg=COLORS["bg"])
         self.root.resizable(True, True)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_window_close)
         self._center_window()
         self._build_ui()
         self._start_session_timeout()
@@ -252,11 +256,27 @@ class AdminDashboard:
         self._reset_timeout()
 
     def _reset_timeout(self, _event=None):
-        if hasattr(self, "_timeout_id"):
-            self.root.after_cancel(self._timeout_id)
-        self._timeout_id = self.root.after(self._TIMEOUT_MS, self._session_expired)
+        if self._is_closing:
+            return
+        self._after_schedule("session_timeout", self._TIMEOUT_MS, self._session_expired)
+
+    def _cancel_scheduled_jobs(self):
+        self._after_cancel_all()
+
+    def _on_window_close(self):
+        if self._is_closing:
+            return
+        self._is_closing = True
+        self._after_mark_closing()
+        self._cancel_scheduled_jobs()
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
 
     def _session_expired(self):
+        if self._is_closing:
+            return
         from tkinter import messagebox
         messagebox.showwarning(
             "Session Expired",
@@ -266,6 +286,11 @@ class AdminDashboard:
         self._logout()
 
     def _logout(self):
+        if self._is_closing:
+            return
+        self._is_closing = True
+        self._after_mark_closing()
+        self._cancel_scheduled_jobs()
         auth.logout()
         self.root.destroy()
         import main

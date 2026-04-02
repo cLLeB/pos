@@ -19,11 +19,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ui.login_screen import COLORS
 from modules import auth
 from database.db_setup import get_setting
+from utils.tk_after import SafeAfterMixin
 
 
-class CashierScreen:
+class CashierScreen(SafeAfterMixin):
     def __init__(self, root):
         self.root = root
+        self._is_closing = False
+        self._init_after_manager(self.root)
         user = auth.get_current_user()
         self._username = user["username"] if user else "Cashier"
 
@@ -55,6 +58,7 @@ class CashierScreen:
 
         self._build_ui()
         self._bind_shortcuts()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_window_close)
         self._start_clock()
         self._start_session_timeout()
 
@@ -370,8 +374,12 @@ class CashierScreen:
 
     def _start_clock(self):
         """Update the clock label every second."""
+        if self._is_closing:
+            return
+        if not self.root.winfo_exists():
+            return
         self.clock_var.set(time.strftime("  %Y-%m-%d   %H:%M:%S"))
-        self.root.after(1000, self._start_clock)
+        self._after_schedule("clock", 1000, self._start_clock)
 
     # ── Keyboard shortcuts ────────────────────────────────────────────────────
 
@@ -662,17 +670,36 @@ class CashierScreen:
         self._reset_timeout()
 
     def _reset_timeout(self, _event=None):
-        if hasattr(self, "_timeout_id"):
-            self.root.after_cancel(self._timeout_id)
-        self._timeout_id = self.root.after(self._TIMEOUT_MS, self._session_expired)
+        if self._is_closing:
+            return
+        self._after_schedule("session_timeout", self._TIMEOUT_MS, self._session_expired)
+
+    def _cancel_scheduled_jobs(self):
+        self._after_cancel_all()
+
+    def _on_window_close(self):
+        if self._is_closing:
+            return
+        self._is_closing = True
+        self._after_mark_closing()
+        self._cancel_scheduled_jobs()
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
 
     def _session_expired(self):
+        if self._is_closing:
+            return
         messagebox.showwarning(
             "Session Expired",
             "You have been logged out due to 30 minutes of inactivity.",
             parent=self.root
         )
         auth.logout()
+        self._is_closing = True
+        self._after_mark_closing()
+        self._cancel_scheduled_jobs()
         self.root.destroy()
         import main
         main.launch()
@@ -680,11 +707,16 @@ class CashierScreen:
     # ── Logout ────────────────────────────────────────────────────────────────
 
     def _logout(self):
+        if self._is_closing:
+            return
         if self.cart:
             if not messagebox.askyesno("Logout",
                     "You have items in the cart. Logout anyway?"):
                 return
         auth.logout()
+        self._is_closing = True
+        self._after_mark_closing()
+        self._cancel_scheduled_jobs()
         self.root.destroy()
         import main
         main.launch()
