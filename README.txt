@@ -25,7 +25,16 @@
          MOMO_PROVIDER_MODE=paystack
          PAYSTACK_PUBLIC_KEY=pk_test_ecb64d8f2f5f2167210a2f87c37e94d1a7b4e460
          PAYSTACK_SECRET_KEY=sk_test_xxxxxxxxxxxxx
-         PAYSTACK_CUSTOMER_EMAIL=payments@yourstore.com
+         PAYSTACK_CUSTOMER_EMAIL=1betterurself@gmail.com
+
+       Desktop POS test-mode setup (Git Bash on Windows):
+         export MOMO_PROVIDER_MODE=paystack
+         export PAYSTACK_PUBLIC_KEY=pk_test_ecb64d8f2f5f2167210a2f87c37e94d1a7b4e460
+         export PAYSTACK_CUSTOMER_EMAIL=1betterurself@gmail.com
+
+       Where to set your secret key yourself:
+         export PAYSTACK_SECRET_KEY=sk_test_your_real_secret_key_here
+       (set this in the same terminal before running `python main.py`)
 
        Live public key (switch when going live):
          PAYSTACK_PUBLIC_KEY=pk_live_09be1b7da418b5dd065b58088c8b72a909318925
@@ -35,7 +44,7 @@
 
   5. (Optional) Deploy webhook service to Render (recommended for live mode):
        - `render.yaml` is included for one-click blueprint deploy.
-    - Set `PAYSTACK_PUBLIC_KEY` (test first, then live when ready).
+       - Set `PAYSTACK_PUBLIC_KEY` (test first, then live when ready).
        - Set secret env var `PAYSTACK_SECRET_KEY` in Render dashboard.
        - Render automatically provides a public domain.
        - Set Paystack webhook URL to:
