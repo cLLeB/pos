@@ -1,0 +1,6 @@
+product_id,product_name,category,current_price,current_stock,units_sold,revenue
+1,Coca Cola 500ml,Beverages,1.5,88,12,18.0
+2,Bread Loaf,Bakery,2.0,38,12,24.0
+4,Rice 1kg,Grains,3.5,51,9,31.5
+5,Eggs (12 pack),Dairy,4.0,32,8,32.0
+3,Milk 1L,Dairy,1.2,78,2,2.4

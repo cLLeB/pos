@@ -1,0 +1,4 @@
+user_id,username,password_hash,role,is_active,created_at
+1,admin,18cee8665cb2ee3f47a1a93bbe9e1df5:c54de0f7b2e6e368b6ab0bae32523d7b92af918ac9f3d9913431a5c82d4002bb,admin,1,2026-03-16 14:28:19
+2,manager1,690bd7fd75387e1aa9f3adcc7a3ad38f:a7ed4afe7bc16fd8efef7fca3256f966341dd2dbee51b4685374b556637b4c90,manager,1,2026-03-16 14:28:19
+3,cashier1,81aee73bddc59edd8ec1ac5dde5a86cc:641d175803669bfa1bcc9fb5a4601c31876dbdb3f39cf281a5f0ae366dda809b,cashier,1,2026-03-16 14:28:19

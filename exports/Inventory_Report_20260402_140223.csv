@@ -1,0 +1,7 @@
+product_id,product_name,category,price,quantity,barcode,status
+5,Eggs (12 pack),Dairy,4.0,40,8901234567894,ok
+2,Bread Loaf,Bakery,2.0,50,8901234567891,ok
+4,Rice 1kg,Grains,3.5,60,8901234567893,ok
+3,Milk 1L,Dairy,1.2,80,8901234567892,ok
+6,RepProduct,Test,5.0,94,REP-001,ok
+1,Coca Cola 500ml,Beverages,1.5,100,8901234567890,ok

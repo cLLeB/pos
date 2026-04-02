@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: pos-paystack-webhook
+    runtime: python
+    plan: free
+    region: frankfurt
+    autoDeploy: true
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python paystack_webhook_server.py"
+    healthCheckPath: /health
+    envVars:
+      - key: MOMO_PROVIDER_MODE
+        value: paystack
+      - key: PAYSTACK_PUBLIC_KEY
+        value: pk_test_ecb64d8f2f5f2167210a2f87c37e94d1a7b4e460
+      - key: PAYSTACK_WEBHOOK_PATH
+        value: /webhook/paystack
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_CUSTOMER_EMAIL
+        value: payments@yourstore.com

@@ -1,0 +1,2 @@
+# No external dependencies required for current webhook server/runtime.
+# Keep file for Render/PaaS build compatibility.

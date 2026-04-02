@@ -1,0 +1,6 @@
+product_id,product_name,category,price,quantity,barcode
+1,Coca Cola 500ml,Beverages,1.5,88,8901234567890
+2,Bread Loaf,Bakery,2.0,38,8901234567891
+3,Milk 1L,Dairy,1.2,78,8901234567892
+4,Rice 1kg,Grains,3.5,51,8901234567893
+5,Eggs (12 pack),Dairy,4.0,32,8901234567894

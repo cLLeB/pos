@@ -1,0 +1,7 @@
+product_id,product_name,category,current_price,current_stock,units_sold,revenue
+6,RepProduct,Test,5.0,94,6,30.0
+1,Coca Cola 500ml,Beverages,1.5,100,0,0
+2,Bread Loaf,Bakery,2.0,50,0,0
+3,Milk 1L,Dairy,1.2,80,0,0
+4,Rice 1kg,Grains,3.5,60,0,0
+5,Eggs (12 pack),Dairy,4.0,40,0,0

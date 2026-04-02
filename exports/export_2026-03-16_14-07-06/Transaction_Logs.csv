@@ -1,0 +1,33 @@
+log_id,user_id,action,details,timestamp
+1,1,LOGIN,User 'admin' logged in,2026-03-16 11:33:23
+2,3,LOGIN,User 'cashier1' logged in,2026-03-16 11:33:23
+3,1,LOGIN,User 'admin' logged in,2026-03-16 11:36:21
+4,1,LOGOUT,User 'admin' logged out,2026-03-16 11:37:02
+5,1,LOGIN,User 'admin' logged in,2026-03-16 11:44:41
+6,1,LOGOUT,User 'admin' logged out,2026-03-16 11:44:41
+7,2,LOGIN,User 'manager1' logged in,2026-03-16 11:44:41
+8,2,LOGOUT,User 'manager1' logged out,2026-03-16 11:44:41
+9,3,LOGIN,User 'cashier1' logged in,2026-03-16 11:44:41
+10,3,LOGOUT,User 'cashier1' logged out,2026-03-16 11:44:41
+11,1,LOGIN,User 'admin' logged in,2026-03-16 11:44:41
+12,1,ADD_USER,Created user 'testcashier' as cashier,2026-03-16 11:44:41
+13,1,LOGOUT,User 'admin' logged out,2026-03-16 11:44:41
+14,1,LOGIN,User 'admin' logged in,2026-03-16 11:48:59
+15,1,LOGIN,User 'admin' logged in,2026-03-16 11:50:11
+16,1,LOGOUT,User 'admin' logged out,2026-03-16 11:50:11
+17,2,LOGIN,User 'manager1' logged in,2026-03-16 11:50:11
+18,2,LOGOUT,User 'manager1' logged out,2026-03-16 11:50:11
+19,3,LOGIN,User 'cashier1' logged in,2026-03-16 11:50:11
+20,3,LOGOUT,User 'cashier1' logged out,2026-03-16 11:50:11
+21,1,LOGIN,User 'admin' logged in,2026-03-16 11:50:11
+22,1,ADD_USER,Created user 'newcashier' as cashier,2026-03-16 11:50:12
+23,1,LOGOUT,User 'admin' logged out,2026-03-16 11:50:12
+24,1,LOGIN,User 'admin' logged in,2026-03-16 11:50:12
+25,1,LOGIN,User 'admin' logged in,2026-03-16 11:54:06
+26,3,LOGIN,User 'cashier1' logged in,2026-03-16 12:40:16
+27,3,LOGIN,User 'cashier1' logged in,2026-03-16 13:20:50
+28,3,LOGIN,User 'cashier1' logged in,2026-03-16 13:38:24
+29,3,LOGOUT,User 'cashier1' logged out,2026-03-16 13:38:24
+30,3,LOGIN,User 'cashier1' logged in,2026-03-16 13:52:52
+31,3,LOGIN,User 'cashier1' logged in,2026-03-16 13:56:18
+32,1,TEST,Day 11 smoke test,2026-03-16 14:07:06
