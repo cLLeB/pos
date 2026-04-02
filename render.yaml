@@ -16,6 +16,6 @@ services:
       - key: PAYSTACK_WEBHOOK_PATH
         value: /webhook/paystack
       - key: PAYSTACK_SECRET_KEY
-        sync: false
+        sync: falsee
       - key: PAYSTACK_CUSTOMER_EMAIL
-        value: payments@yourstore.com
+        value: 1betterurself@gmail.com
