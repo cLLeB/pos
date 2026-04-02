@@ -900,9 +900,9 @@ class PaymentDialog(tk.Toplevel):
     def _handle_momo_result(self, txn_id: str, status: str, reason: str,
                              provider_name: str, phone: str):
         """Called on the main thread when the MoMo callback fires."""
-        self._retry_verify_btn.config(state="disabled")
-        self._hide_momo_code_entry()
         if status == "SUCCESS":
+            self._retry_verify_btn.config(state="disabled")
+            self._hide_momo_code_entry()
             self._momo_status_var.set("\u2705 Payment approved!")
             self.update_idletasks()
             sale_id = self._process_sale(
@@ -917,12 +917,31 @@ class PaymentDialog(tk.Toplevel):
                 except Exception:
                     pass
         elif status == "FAILED":
+            if self._message_requires_momo_code(reason):
+                self._retry_verify_btn.config(state="normal")
+                self._momo_status_var.set(
+                    "\u23f3 Provider is requesting OTP/code confirmation.\n"
+                    "Enter code and submit to continue."
+                )
+                self.error_var.set("")
+                self._show_momo_code_entry(
+                    challenge_type="otp",
+                    message=reason,
+                    enable_submit=True,
+                    auto_popup=True,
+                )
+                return
+
+            self._retry_verify_btn.config(state="disabled")
+            self._hide_momo_code_entry()
             self._momo_status_var.set("")
             self.error_var.set(
                 f"\u274c Payment failed. {reason}\n"
                 "If customer got an OTP/code prompt, ensure they complete it on their phone, then try again."
             )
         else:  # EXPIRED
+            self._retry_verify_btn.config(state="disabled")
+            self._hide_momo_code_entry()
             self._momo_status_var.set("")
             self.error_var.set(
                 "\u23f0 Payment timed out — customer did not respond. "

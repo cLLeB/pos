@@ -235,6 +235,55 @@ class TestManualRetryVerification(PosTestCase):
         finally:
             paystack._request_json = original_request
 
+    def test_handle_payment_callback_failed_with_otp_does_not_finalize(self):
+        txn_id = create_momo_transaction(
+            sale_id="",
+            phone="+233200000010",
+            amount=9.0,
+            provider="MTN MoMo",
+        )
+        reference = get_momo_transaction(txn_id)["reference"]
+
+        ok = handle_payment_callback(reference, "FAILED", "Enter OTP code to continue")
+        self.assertTrue(ok)
+
+        updated = get_momo_transaction(txn_id)
+        self.assertEqual(updated["status"], "PENDING")
+
+    def test_poll_until_final_ignores_early_failed_when_challenge_pending(self):
+        txn_id = create_momo_transaction(
+            sale_id="",
+            phone="+233200000011",
+            amount=11.0,
+            provider="MTN MoMo",
+        )
+        reference = get_momo_transaction(txn_id)["reference"]
+        momo_mod._pending_challenges_by_txn[txn_id] = {
+            "challenge_required": True,
+            "challenge_type": "otp",
+            "reference": reference,
+            "provider": "MTN MoMo",
+        }
+
+        provider = momo_mod.PaystackMoMoProvider()
+        original_verify = paystack.verify_transaction
+        original_sleep = momo_mod.time.sleep
+        try:
+            states = iter([
+                {"status": "FAILED", "reason": "Transaction was not completed"},
+                {"status": "SUCCESS", "reason": "Approved"},
+            ])
+            paystack.verify_transaction = lambda ref: next(states)
+            momo_mod.time.sleep = lambda _seconds: None
+
+            provider._poll_until_final(reference)
+
+            updated = get_momo_transaction(txn_id)
+            self.assertEqual(updated["status"], "SUCCESS")
+        finally:
+            paystack.verify_transaction = original_verify
+            momo_mod.time.sleep = original_sleep
+
 
 class TestTelecelChallengeSubmission(PosTestCase):
     def test_charge_detailed_marks_send_otp_as_challenge_required(self):

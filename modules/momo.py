@@ -142,6 +142,9 @@ def handle_payment_callback(reference: str, status: str,
         return False
 
     normalized = status.upper()
+    if normalized == "FAILED" and _reason_requires_code(reason):
+        return True
+
     if normalized not in ("SUCCESS", "FAILED", "EXPIRED"):
         normalized = "FAILED"
 
@@ -227,6 +230,23 @@ def get_pending_momo_challenge(txn_id: str) -> dict | None:
     return dict(challenge) if challenge else None
 
 
+def _reason_requires_code(reason: str) -> bool:
+    text = (reason or "").strip().lower()
+    if not text:
+        return False
+    markers = ("otp", "voucher", "verification code", "enter code", "submit code")
+    return any(m in text for m in markers)
+
+
+def _reference_has_pending_challenge(reference: str) -> bool:
+    if reference in _pending_challenges_by_reference:
+        return True
+    txn = get_momo_by_reference(reference)
+    if not txn:
+        return False
+    return txn.get("txn_id") in _pending_challenges_by_txn
+
+
 # ── Provider abstraction ──────────────────────────────────────────────────────
 
 class MoMoProvider(ABC):
@@ -301,6 +321,7 @@ class PaystackMoMoProvider(MoMoProvider):
 
     POLL_INTERVAL = 4    # seconds
     TIMEOUT       = 150  # seconds
+    FAILED_GRACE_WINDOW = 25  # seconds before honoring generic FAILED while challenge may be active
     DEFAULT_EMAIL = os.getenv("PAYSTACK_CUSTOMER_EMAIL", "customer@pos.local")
 
     @property
@@ -375,6 +396,13 @@ class PaystackMoMoProvider(MoMoProvider):
 
             status = result.get("status", "PENDING")
             reason = result.get("reason", "")
+
+            if status == "FAILED":
+                if _reason_requires_code(reason):
+                    continue
+                if _reference_has_pending_challenge(reference) and elapsed <= self.FAILED_GRACE_WINDOW:
+                    continue
+
             if status in ("SUCCESS", "FAILED"):
                 handle_payment_callback(reference, status, reason)
                 return
@@ -696,6 +724,10 @@ def _poll_after_challenge_submit(reference: str, timeout: int = 90, interval: in
 
         status = (result.get("status") or "PENDING").upper()
         reason = result.get("reason") or ""
+
+        if status == "FAILED" and _reason_requires_code(reason):
+            continue
+
         if status in ("SUCCESS", "FAILED", "EXPIRED"):
             handle_payment_callback(reference, status, reason)
             return
