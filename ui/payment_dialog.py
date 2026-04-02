@@ -481,8 +481,8 @@ class PaymentDialog(tk.Toplevel):
             bg=COLORS["panel"],
             fg=COLORS["muted"],
             padx=16,
-            pady=(10, 2),
-        ).pack(anchor="w")
+            pady=0,
+        ).pack(anchor="w", pady=(10, 2))
 
         code_entry = tk.Entry(
             dlg,
