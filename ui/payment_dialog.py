@@ -299,7 +299,8 @@ class PaymentDialog(tk.Toplevel):
                 font=("Segoe UI", 10),
                 bg=COLORS["bg"], fg=COLORS["text"],
                 selectcolor=COLORS["accent"],
-                activebackground=COLORS["bg"]
+                activebackground=COLORS["bg"],
+                command=self._on_mobile_provider_changed,
             ).pack(anchor="w", pady=2)
 
         tk.Frame(f, bg=COLORS["accent"], height=1).pack(fill="x", pady=12)
@@ -331,8 +332,98 @@ class PaymentDialog(tk.Toplevel):
         )
         self._momo_status_lbl.pack(anchor="w", pady=(8, 0))
 
+        action_row = tk.Frame(f, bg=COLORS["bg"])
+        action_row.pack(fill="x", pady=(8, 0))
+        self._retry_verify_btn = tk.Button(
+            action_row,
+            text="Retry Verification",
+            font=("Segoe UI", 9, "bold"),
+            bg=COLORS["panel"],
+            fg=COLORS["white"],
+            activebackground=COLORS["accent"],
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=6,
+            cursor="hand2",
+            state="disabled",
+            command=self._retry_momo_verification,
+        )
+        self._retry_verify_btn.pack(anchor="w")
+
+        self._momo_code_row = tk.Frame(f, bg=COLORS["bg"])
+        self._momo_code_row.pack(fill="x", pady=(10, 0))
+        self._momo_code_label_var = tk.StringVar(value="Telecel Voucher / OTP Code")
+        tk.Label(
+            self._momo_code_row,
+            textvariable=self._momo_code_label_var,
+            font=("Segoe UI", 9),
+            bg=COLORS["bg"],
+            fg=COLORS["muted"],
+        ).pack(anchor="w", pady=(0, 2))
+
+        code_input_row = tk.Frame(self._momo_code_row, bg=COLORS["bg"])
+        code_input_row.pack(fill="x")
+        self._momo_code_var = tk.StringVar()
+        tk.Entry(
+            code_input_row,
+            textvariable=self._momo_code_var,
+            font=("Segoe UI", 11),
+            bg=COLORS["accent"],
+            fg=COLORS["white"],
+            insertbackground=COLORS["white"],
+            relief="flat",
+            bd=6,
+        ).pack(side="left", fill="x", expand=True)
+        self._momo_submit_code_btn = tk.Button(
+            code_input_row,
+            text="Submit Code",
+            font=("Segoe UI", 9, "bold"),
+            bg=COLORS["button"],
+            fg=COLORS["white"],
+            activebackground=COLORS["button_hover"],
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=6,
+            cursor="hand2",
+            state="disabled",
+            command=self._submit_momo_code,
+        )
+        self._momo_submit_code_btn.pack(side="left", padx=(8, 0))
+        self._momo_code_row.pack_forget()
+
         # Pending txn tracking (used during CONFIRM flow)
         self._momo_txn_id = None
+        self._momo_provider_name = ""
+        self._momo_phone = ""
+
+        # Initial visibility follows selected provider.
+        self._on_mobile_provider_changed()
+
+    def _on_mobile_provider_changed(self):
+        provider_name = (self.provider_var.get() or "").strip()
+        if provider_name == "Telecel Cash":
+            self._show_momo_code_entry(enable_submit=False)
+        else:
+            self._hide_momo_code_entry()
+
+    def _show_momo_code_entry(self, *, challenge_type: str = "otp", message: str = "", enable_submit: bool = True):
+        label = "Telecel Voucher / OTP Code" if challenge_type == "otp" else "Challenge Value"
+        self._momo_code_label_var.set(label)
+        self._momo_code_var.set("")
+        self._momo_code_row.pack(fill="x", pady=(10, 0))
+        self._momo_submit_code_btn.config(state="normal" if enable_submit else "disabled")
+        if message:
+            self._momo_status_var.set(
+                f"{self._momo_status_var.get()}\n"
+                f"Enter the code in POS and click Submit Code."
+            )
+
+    def _hide_momo_code_entry(self):
+        self._momo_code_var.set("")
+        self._momo_submit_code_btn.config(state="disabled")
+        self._momo_code_row.pack_forget()
 
     # ── Card tab ──────────────────────────────────────────────────────────────
 
@@ -633,7 +724,7 @@ class PaymentDialog(tk.Toplevel):
         self.error_var.set("")
         self.update_idletasks()
 
-        from modules.momo import initiate_momo_payment
+        from modules.momo import initiate_momo_payment, get_pending_momo_challenge
 
         def _on_momo_result(txn_id: str, status: str, reason: str):
             # This fires from a background thread — schedule UI update on main thread
@@ -641,7 +732,7 @@ class PaymentDialog(tk.Toplevel):
                 txn_id, status, reason, provider_name, phone
             ))
 
-        ok, error, txn_id = initiate_momo_payment(
+        ok, provider_msg, txn_id = initiate_momo_payment(
             sale_id       = placeholder_sale_id,
             phone         = phone,
             amount        = self.totals["total"],
@@ -652,18 +743,47 @@ class PaymentDialog(tk.Toplevel):
 
         if not ok:
             self._momo_status_var.set("")
-            self.error_var.set(f"Failed to send request: {error}")
+            self.error_var.set(f"Failed to send request: {provider_msg}")
             return
 
         self._momo_txn_id = txn_id
-        self._momo_status_var.set(
-            f"\u23f3 Waiting for customer to approve on their phone...\n"
-            f"(Transaction will auto-complete once approved)"
-        )
+        self._momo_provider_name = provider_name
+        self._momo_phone = phone
+        self._retry_verify_btn.config(state="normal")
+        instruction = (provider_msg or "").strip()
+
+        if provider_name in ("MTN MoMo", "AT Money (AirtelTigo)"):
+            status_lines = [
+                "\u23f3 Waiting for customer to approve on their phone...",
+                "Customer must enter MoMo PIN on their own phone prompt.",
+                "(Transaction will auto-complete once approved)",
+            ]
+        else:
+            status_lines = [
+                "\u23f3 Waiting for customer confirmation...",
+                "For Telecel, customer may need voucher/OTP from *110#.",
+                "Use the code field below if prompted.",
+            ]
+
+        if instruction:
+            status_lines.insert(1, f"Provider message: {instruction}")
+        self._momo_status_var.set("\n".join(status_lines))
+
+        challenge = get_pending_momo_challenge(txn_id)
+        if challenge and challenge.get("challenge_required"):
+            self._show_momo_code_entry(
+                challenge_type=(challenge.get("challenge_type") or "otp"),
+                message=(challenge.get("message") or ""),
+                enable_submit=True,
+            )
+        else:
+            self._on_mobile_provider_changed()
 
     def _handle_momo_result(self, txn_id: str, status: str, reason: str,
                              provider_name: str, phone: str):
         """Called on the main thread when the MoMo callback fires."""
+        self._retry_verify_btn.config(state="disabled")
+        self._hide_momo_code_entry()
         if status == "SUCCESS":
             self._momo_status_var.set("\u2705 Payment approved!")
             self.update_idletasks()
@@ -681,8 +801,8 @@ class PaymentDialog(tk.Toplevel):
         elif status == "FAILED":
             self._momo_status_var.set("")
             self.error_var.set(
-                f"\u274c Payment declined or failed. {reason}\n"
-                "Ask customer to try again or use another method."
+                f"\u274c Payment failed. {reason}\n"
+                "If customer got an OTP/code prompt, ensure they complete it on their phone, then try again."
             )
         else:  # EXPIRED
             self._momo_status_var.set("")
@@ -690,6 +810,80 @@ class PaymentDialog(tk.Toplevel):
                 "\u23f0 Payment timed out — customer did not respond. "
                 "Please try again or use another payment method."
             )
+
+    def _submit_momo_code(self):
+        """Submit Telecel voucher/OTP code for the active MoMo transaction."""
+        if not self._momo_txn_id:
+            self.error_var.set("No active Mobile Money transaction.")
+            return
+
+        code = (self._momo_code_var.get() or "").strip()
+        if not code:
+            self.error_var.set("Enter voucher/OTP code before submitting.")
+            return
+
+        self.error_var.set("")
+        self._momo_status_var.set("\U0001f504 Submitting voucher/OTP code...")
+        self.update_idletasks()
+
+        try:
+            from modules.momo import submit_momo_challenge_code
+
+            ok, status, message = submit_momo_challenge_code(self._momo_txn_id, code)
+        except Exception as e:
+            self.error_var.set(f"Code submission failed: {e}")
+            return
+
+        if not ok:
+            self.error_var.set(message or "Code submission failed.")
+            return
+
+        if status in ("SUCCESS", "FAILED", "EXPIRED"):
+            self._momo_status_var.set("\u23f3 Code accepted. Finalizing transaction...")
+            return
+
+        self._momo_status_var.set(
+            "\u23f3 Code submitted successfully.\n"
+            f"{message}\n"
+            "Waiting for provider confirmation..."
+        )
+
+    def _retry_momo_verification(self):
+        """Manually retry verification for the current pending MoMo transaction."""
+        if not self._momo_txn_id:
+            self.error_var.set("No active Mobile Money transaction to verify.")
+            return
+
+        self.error_var.set("")
+        self._momo_status_var.set("\U0001f504 Checking payment status with provider...")
+        self.update_idletasks()
+
+        try:
+            from modules.momo import retry_verify_momo_transaction
+
+            ok, status, message = retry_verify_momo_transaction(self._momo_txn_id)
+        except Exception as e:
+            self.error_var.set(f"Verification retry failed: {e}")
+            return
+
+        if not ok:
+            self.error_var.set(message or "Verification retry failed.")
+            return
+
+        if status in ("SUCCESS", "FAILED", "EXPIRED"):
+            # Finalization callback will run shortly via handle_payment_callback.
+            self._momo_status_var.set("\u23f3 Verification received. Finalizing transaction...")
+            return
+
+        self._momo_status_var.set(
+            "\u23f3 Payment still pending.\n"
+            f"{message}\n"
+            (
+                "For Telecel: enter voucher/OTP in POS and submit."
+                if self._momo_provider_name == "Telecel Cash"
+                else "Customer should complete the prompt on their phone."
+            )
+        )
 
     def _confirm_card(self):
         card_type = self.card_type_var.get()

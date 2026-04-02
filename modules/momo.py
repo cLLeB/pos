@@ -151,6 +151,7 @@ def handle_payment_callback(reference: str, status: str,
         return True
 
     update_momo_status(txn["txn_id"], normalized, reason)
+    _clear_pending_challenge(txn["txn_id"])
 
     # Notify any registered listener for this txn_id
     _fire_callback(txn["txn_id"], normalized, reason)
@@ -188,6 +189,8 @@ def handle_paystack_webhook(raw_body: bytes, signature: str) -> tuple[bool, str]
 # Maps txn_id → callable(status, reason) so the UI can react immediately.
 
 _callbacks: dict[str, callable] = {}
+_pending_challenges_by_reference: dict[str, dict] = {}
+_pending_challenges_by_txn: dict[str, dict] = {}
 
 
 def register_callback(txn_id: str, fn) -> None:
@@ -202,6 +205,26 @@ def _fire_callback(txn_id: str, status: str, reason: str) -> None:
     fn = _callbacks.pop(txn_id, None)
     if fn:
         fn(status, reason)
+
+
+def _stage_challenge_for_reference(reference: str, challenge: dict) -> None:
+    _pending_challenges_by_reference[reference] = dict(challenge)
+
+
+def _assign_staged_challenge(txn_id: str, reference: str) -> None:
+    challenge = _pending_challenges_by_reference.pop(reference, None)
+    if challenge:
+        _pending_challenges_by_txn[txn_id] = challenge
+
+
+def _clear_pending_challenge(txn_id: str) -> None:
+    _pending_challenges_by_txn.pop(txn_id, None)
+
+
+def get_pending_momo_challenge(txn_id: str) -> dict | None:
+    """Return pending challenge metadata for a transaction (if any)."""
+    challenge = _pending_challenges_by_txn.get(txn_id)
+    return dict(challenge) if challenge else None
 
 
 # ── Provider abstraction ──────────────────────────────────────────────────────
@@ -298,7 +321,7 @@ class PaystackMoMoProvider(MoMoProvider):
         }
 
         try:
-            ok, message = paystack.charge_mobile_money(
+            details = paystack.charge_mobile_money_detailed(
                 amount=amount,
                 phone=phone,
                 provider_name=(txn["provider"] if txn else "MTN MoMo"),
@@ -310,31 +333,50 @@ class PaystackMoMoProvider(MoMoProvider):
         except Exception as e:
             return False, f"Paystack charge error: {e}"
 
-        if not ok:
-            return False, message
+        if not details.get("ok"):
+            return False, details.get("message", "Charge initialization failed.")
+
+        if details.get("challenge_required"):
+            _stage_challenge_for_reference(
+                reference,
+                {
+                    "challenge_required": True,
+                    "challenge_type": details.get("challenge_type", "otp"),
+                    "message": details.get("message", "Additional confirmation required."),
+                    "reference": reference,
+                    "provider": txn["provider"] if txn else "",
+                },
+            )
 
         threading.Thread(
             target=self._poll_until_final,
             args=(reference,),
             daemon=True,
         ).start()
-        return True, message
+        return True, details.get("message", "Request sent.")
 
     def check_status(self, reference: str) -> str:
         try:
             result = paystack.verify_transaction(reference)
             return result["status"]
         except Exception:
-            return "FAILED"
+            return "PENDING"
 
     def _poll_until_final(self, reference: str) -> None:
         elapsed = 0
         while elapsed < self.TIMEOUT:
             time.sleep(self.POLL_INTERVAL)
             elapsed += self.POLL_INTERVAL
-            status = self.check_status(reference)
+            try:
+                result = paystack.verify_transaction(reference)
+            except Exception:
+                # Keep waiting for webhook or next poll rather than failing hard.
+                continue
+
+            status = result.get("status", "PENDING")
+            reason = result.get("reason", "")
             if status in ("SUCCESS", "FAILED"):
-                handle_payment_callback(reference, status)
+                handle_payment_callback(reference, status, reason)
                 return
         handle_payment_callback(reference, "EXPIRED", "Paystack confirmation timed out.")
 
@@ -553,7 +595,7 @@ def initiate_momo_payment(
     1. Creates a PENDING DB record.
     2. Registers the on_result callback.
     3. Calls the provider's request_to_pay().
-    4. Returns (initiated, error_message, txn_id).
+    4. Returns (initiated, provider_message_or_error, txn_id).
 
     The on_result callback fires automatically when the payment resolves
     (either from the mock thread or a real provider callback).
@@ -570,10 +612,100 @@ def initiate_momo_payment(
 
     register_callback(txn_id, _on_resolved)
 
-    ok, error = provider.request_to_pay(phone, amount, ref, currency)
+    ok, provider_msg = provider.request_to_pay(phone, amount, ref, currency)
     if not ok:
         unregister_callback(txn_id)
-        update_momo_status(txn_id, "FAILED", error)
-        return False, error, txn_id
+        update_momo_status(txn_id, "FAILED", provider_msg)
+        return False, provider_msg, txn_id
 
-    return True, "", txn_id
+    _assign_staged_challenge(txn_id, ref)
+
+    return True, provider_msg, txn_id
+
+
+def submit_momo_challenge_code(txn_id: str, code: str) -> tuple[bool, str, str]:
+    """
+    Submit pending challenge input (e.g. Telecel voucher/OTP) for a transaction.
+
+    Returns (ok, status, message).
+    """
+    txn = get_momo_transaction(txn_id)
+    if not txn:
+        return False, "UNKNOWN", "Transaction not found."
+
+    current_status = (txn.get("status") or "").upper()
+    if current_status in ("SUCCESS", "FAILED", "EXPIRED"):
+        return True, current_status, "Transaction already finalized."
+
+    challenge = get_pending_momo_challenge(txn_id)
+    if not challenge:
+        return False, "UNKNOWN", "No pending challenge code is required for this transaction."
+
+    reference = challenge.get("reference") or txn.get("reference") or ""
+    challenge_type = (challenge.get("challenge_type") or "otp").lower()
+    if challenge_type not in {"otp", "phone"}:
+        return False, "UNKNOWN", f"Unsupported challenge type: {challenge_type}"
+
+    try:
+        ok_submit, submit_msg, _ = paystack.submit_charge_challenge(
+            reference=reference,
+            challenge_value=code,
+            challenge_type=challenge_type,
+        )
+    except Exception as e:
+        return False, "UNKNOWN", f"Challenge submission failed: {e}"
+
+    if not ok_submit:
+        return False, "FAILED", submit_msg
+
+    try:
+        verification = paystack.verify_transaction(reference)
+    except Exception:
+        verification = {"status": "PENDING", "reason": submit_msg}
+
+    status = (verification.get("status") or "PENDING").upper()
+    reason = verification.get("reason") or submit_msg
+    if status in ("SUCCESS", "FAILED", "EXPIRED"):
+        handle_payment_callback(reference, status, reason)
+        return True, status, reason
+
+    return True, "PENDING", reason
+
+
+def retry_verify_momo_transaction(txn_id: str) -> tuple[bool, str, str]:
+    """
+    Manually trigger a verification check for an existing MoMo transaction.
+
+    Returns:
+      (ok, status, message)
+      - ok=False means lookup/provider call failed.
+      - status is one of PENDING/SUCCESS/FAILED/EXPIRED (or UNKNOWN on hard error).
+    """
+    txn = get_momo_transaction(txn_id)
+    if not txn:
+        return False, "UNKNOWN", "Transaction not found."
+
+    current_status = (txn.get("status") or "").upper()
+    if current_status in ("SUCCESS", "FAILED", "EXPIRED"):
+        return True, current_status, "Transaction already finalized."
+
+    provider_name = txn.get("provider") or "MTN MoMo"
+    provider = get_provider(provider_name)
+    reference = txn.get("reference") or ""
+
+    try:
+        if isinstance(provider, PaystackMoMoProvider):
+            result = paystack.verify_transaction(reference)
+            status = (result.get("status") or "PENDING").upper()
+            reason = result.get("reason") or ""
+        else:
+            status = (provider.check_status(reference) or "PENDING").upper()
+            reason = ""
+    except Exception as e:
+        return False, "UNKNOWN", f"Verification check failed: {e}"
+
+    if status in ("SUCCESS", "FAILED", "EXPIRED"):
+        handle_payment_callback(reference, status, reason)
+        return True, status, reason
+
+    return True, "PENDING", reason or "Still awaiting customer confirmation."
