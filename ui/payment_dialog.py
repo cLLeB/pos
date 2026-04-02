@@ -397,6 +397,7 @@ class PaymentDialog(tk.Toplevel):
         self._momo_txn_id = None
         self._momo_provider_name = ""
         self._momo_phone = ""
+        self._momo_code_modal = None
 
         # Initial visibility follows selected provider.
         self._on_mobile_provider_changed()
@@ -414,7 +415,8 @@ class PaymentDialog(tk.Toplevel):
             return False
         return any(marker in text for marker in ("otp", "voucher", "verification code", "enter code", "submit code"))
 
-    def _show_momo_code_entry(self, *, challenge_type: str = "otp", message: str = "", enable_submit: bool = True):
+    def _show_momo_code_entry(self, *, challenge_type: str = "otp", message: str = "", enable_submit: bool = True,
+                              auto_popup: bool = False):
         label = "Telecel Voucher / OTP Code" if challenge_type == "otp" else "Challenge Value"
         self._momo_code_label_var.set(label)
         self._momo_code_var.set("")
@@ -425,11 +427,113 @@ class PaymentDialog(tk.Toplevel):
                 f"{self._momo_status_var.get()}\n"
                 f"Enter the code in POS and click Submit Code."
             )
+        if enable_submit and auto_popup:
+            self._open_momo_code_modal(message)
 
     def _hide_momo_code_entry(self):
         self._momo_code_var.set("")
         self._momo_submit_code_btn.config(state="disabled")
         self._momo_code_row.pack_forget()
+        self._close_momo_code_modal()
+
+    def _open_momo_code_modal(self, prompt_message: str = ""):
+        """Open/focus a small modal to capture OTP/voucher code quickly."""
+        if self._momo_code_modal and self._momo_code_modal.winfo_exists():
+            self._momo_code_modal.deiconify()
+            self._momo_code_modal.lift()
+            self._momo_code_modal.focus_force()
+            return
+
+        dlg = tk.Toplevel(self)
+        self._momo_code_modal = dlg
+        dlg.title("Enter MoMo Code")
+        dlg.configure(bg=COLORS["panel"])
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        tk.Label(
+            dlg,
+            text="Customer received OTP/Voucher code",
+            font=("Segoe UI", 10, "bold"),
+            bg=COLORS["panel"],
+            fg=COLORS["white"],
+            pady=10,
+            padx=16,
+        ).pack(anchor="w")
+
+        if prompt_message:
+            tk.Label(
+                dlg,
+                text=prompt_message,
+                font=("Segoe UI", 9),
+                bg=COLORS["panel"],
+                fg=COLORS["muted"],
+                wraplength=340,
+                justify="left",
+                padx=16,
+            ).pack(anchor="w")
+
+        tk.Label(
+            dlg,
+            text="Enter code",
+            font=("Segoe UI", 9),
+            bg=COLORS["panel"],
+            fg=COLORS["muted"],
+            padx=16,
+            pady=(10, 2),
+        ).pack(anchor="w")
+
+        code_entry = tk.Entry(
+            dlg,
+            textvariable=self._momo_code_var,
+            font=("Segoe UI", 12),
+            bg=COLORS["bg"],
+            fg=COLORS["white"],
+            insertbackground=COLORS["white"],
+            relief="flat",
+            bd=6,
+            width=26,
+        )
+        code_entry.pack(fill="x", padx=16)
+        code_entry.focus_set()
+        code_entry.bind("<Return>", lambda e: self._submit_momo_code())
+
+        btn_row = tk.Frame(dlg, bg=COLORS["panel"], padx=16, pady=12)
+        btn_row.pack(fill="x")
+        tk.Button(
+            btn_row,
+            text="Submit Code",
+            command=self._submit_momo_code,
+            bg=COLORS["button"],
+            fg=COLORS["white"],
+            font=("Segoe UI", 10, "bold"),
+            relief="flat",
+            padx=12,
+            pady=6,
+            cursor="hand2",
+        ).pack(side="left", padx=(0, 8))
+        tk.Button(
+            btn_row,
+            text="Close",
+            command=dlg.destroy,
+            bg=COLORS["panel"],
+            fg=COLORS["muted"],
+            font=("Segoe UI", 10),
+            relief="flat",
+            padx=10,
+            pady=6,
+            cursor="hand2",
+        ).pack(side="left")
+
+        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+        dlg.bind("<Escape>", lambda e: dlg.destroy())
+        dlg.bind("<Destroy>", lambda e: setattr(self, "_momo_code_modal", None))
+
+    def _close_momo_code_modal(self):
+        if self._momo_code_modal and self._momo_code_modal.winfo_exists():
+            self._momo_code_modal.destroy()
+        self._momo_code_modal = None
 
     # ── Card tab ──────────────────────────────────────────────────────────────
 
@@ -781,12 +885,14 @@ class PaymentDialog(tk.Toplevel):
                 challenge_type=(challenge.get("challenge_type") or "otp"),
                 message=(challenge.get("message") or ""),
                 enable_submit=True,
+                auto_popup=True,
             )
         elif self._message_requires_momo_code(instruction):
             self._show_momo_code_entry(
                 challenge_type="otp",
                 message=instruction,
                 enable_submit=True,
+                auto_popup=True,
             )
         else:
             self._on_mobile_provider_changed()
@@ -827,15 +933,16 @@ class PaymentDialog(tk.Toplevel):
         """Submit Telecel voucher/OTP code for the active MoMo transaction."""
         if not self._momo_txn_id:
             self.error_var.set("No active Mobile Money transaction.")
-            return
+            return False
 
-        code = (self._momo_code_var.get() or "").strip()
+        code = "".join((self._momo_code_var.get() or "").split())
         if not code:
             self.error_var.set("Enter voucher/OTP code before submitting.")
-            return
+            return False
 
         self.error_var.set("")
         self._momo_status_var.set("\U0001f504 Submitting voucher/OTP code...")
+        self._momo_submit_code_btn.config(state="disabled")
         self.update_idletasks()
 
         try:
@@ -844,21 +951,26 @@ class PaymentDialog(tk.Toplevel):
             ok, status, message = submit_momo_challenge_code(self._momo_txn_id, code)
         except Exception as e:
             self.error_var.set(f"Code submission failed: {e}")
-            return
+            self._momo_submit_code_btn.config(state="normal")
+            return False
 
         if not ok:
             self.error_var.set(message or "Code submission failed.")
-            return
+            self._momo_submit_code_btn.config(state="normal")
+            return False
 
         if status in ("SUCCESS", "FAILED", "EXPIRED"):
             self._momo_status_var.set("\u23f3 Code accepted. Finalizing transaction...")
-            return
+            self._close_momo_code_modal()
+            return True
 
         self._momo_status_var.set(
             "\u23f3 Code submitted successfully.\n"
             f"{message}\n"
-            "Waiting for provider confirmation..."
+            "Waiting for provider confirmation (auto-checking in background)..."
         )
+        self._close_momo_code_modal()
+        return True
 
     def _retry_momo_verification(self):
         """Manually retry verification for the current pending MoMo transaction."""
@@ -902,6 +1014,7 @@ class PaymentDialog(tk.Toplevel):
                 challenge_type="otp",
                 message=message,
                 enable_submit=True,
+                auto_popup=True,
             )
 
     def _confirm_card(self):

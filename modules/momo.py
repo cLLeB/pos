@@ -633,6 +633,10 @@ def submit_momo_challenge_code(txn_id: str, code: str) -> tuple[bool, str, str]:
     if not txn:
         return False, "UNKNOWN", "Transaction not found."
 
+    normalized_code = "".join(str(code or "").split())
+    if not normalized_code:
+        return False, "UNKNOWN", "OTP/voucher code is required."
+
     current_status = (txn.get("status") or "").upper()
     if current_status in ("SUCCESS", "FAILED", "EXPIRED"):
         return True, current_status, "Transaction already finalized."
@@ -649,7 +653,7 @@ def submit_momo_challenge_code(txn_id: str, code: str) -> tuple[bool, str, str]:
     try:
         ok_submit, submit_msg, _ = paystack.submit_charge_challenge(
             reference=reference,
-            challenge_value=code,
+            challenge_value=normalized_code,
             challenge_type=challenge_type,
         )
     except Exception as e:
@@ -669,7 +673,32 @@ def submit_momo_challenge_code(txn_id: str, code: str) -> tuple[bool, str, str]:
         handle_payment_callback(reference, status, reason)
         return True, status, reason
 
+    # Keep checking in background so cashier doesn't depend only on manual retry.
+    threading.Thread(
+        target=_poll_after_challenge_submit,
+        args=(reference,),
+        daemon=True,
+    ).start()
+
     return True, "PENDING", reason
+
+
+def _poll_after_challenge_submit(reference: str, timeout: int = 90, interval: int = 4) -> None:
+    """Background verification after challenge submission until terminal state."""
+    elapsed = 0
+    while elapsed < timeout:
+        time.sleep(interval)
+        elapsed += interval
+        try:
+            result = paystack.verify_transaction(reference)
+        except Exception:
+            continue
+
+        status = (result.get("status") or "PENDING").upper()
+        reason = result.get("reason") or ""
+        if status in ("SUCCESS", "FAILED", "EXPIRED"):
+            handle_payment_callback(reference, status, reason)
+            return
 
 
 def retry_verify_momo_transaction(txn_id: str) -> tuple[bool, str, str]:

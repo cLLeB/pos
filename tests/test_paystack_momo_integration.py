@@ -319,3 +319,59 @@ class TestTelecelChallengeSubmission(PosTestCase):
         finally:
             paystack.submit_charge_challenge = original_submit
             paystack.verify_transaction = original_verify
+
+    def test_submit_momo_challenge_code_normalizes_spaces(self):
+        txn_id = create_momo_transaction(
+            sale_id="",
+            phone="+233200000008",
+            amount=6.0,
+            provider="MTN MoMo",
+        )
+
+        captured = {}
+        original_submit = paystack.submit_charge_challenge
+        original_verify = paystack.verify_transaction
+        try:
+            def _submit_capture(**kwargs):
+                captured.update(kwargs)
+                return True, "Code accepted", {}
+
+            paystack.submit_charge_challenge = _submit_capture
+            paystack.verify_transaction = lambda reference: {
+                "status": "PENDING",
+                "reason": "Awaiting final confirmation",
+            }
+
+            ok, status, _ = submit_momo_challenge_code(txn_id, "12 34 56")
+            self.assertTrue(ok)
+            self.assertEqual(status, "PENDING")
+            self.assertEqual(captured.get("challenge_value"), "123456")
+        finally:
+            paystack.submit_charge_challenge = original_submit
+            paystack.verify_transaction = original_verify
+
+    def test_poll_after_challenge_submit_resolves_terminal_status(self):
+        txn_id = create_momo_transaction(
+            sale_id="",
+            phone="+233200000009",
+            amount=7.0,
+            provider="MTN MoMo",
+        )
+        reference = get_momo_transaction(txn_id)["reference"]
+
+        original_verify = paystack.verify_transaction
+        original_sleep = momo_mod.time.sleep
+        try:
+            states = iter([
+                {"status": "PENDING", "reason": "Still processing"},
+                {"status": "SUCCESS", "reason": "Approved"},
+            ])
+            paystack.verify_transaction = lambda ref: next(states)
+            momo_mod.time.sleep = lambda _seconds: None
+
+            momo_mod._poll_after_challenge_submit(reference, timeout=8, interval=2)
+            updated = get_momo_by_reference(reference)
+            self.assertEqual(updated["status"], "SUCCESS")
+        finally:
+            paystack.verify_transaction = original_verify
+            momo_mod.time.sleep = original_sleep
