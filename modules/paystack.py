@@ -27,7 +27,13 @@ from urllib.request import Request, urlopen
 
 
 BASE_URL = os.getenv("PAYSTACK_BASE_URL", "https://api.paystack.co").rstrip("/")
-SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
+# Backward-compatible module fallback used by legacy tests/mocks.
+SECRET_KEY = (os.getenv("PAYSTACK_SECRET_KEY", "") or "").strip()
+
+
+def _secret_key() -> str:
+    """Read Paystack secret key dynamically from environment."""
+    return SECRET_KEY or (os.getenv("PAYSTACK_SECRET_KEY", "") or "").strip()
 
 _PROVIDER_MAP = {
     "MTN MoMo": "mtn",
@@ -42,7 +48,7 @@ class PaystackError(Exception):
 
 def is_configured() -> bool:
     """Return True when Paystack credentials are available."""
-    return bool(SECRET_KEY.strip())
+    return bool(_secret_key())
 
 
 def provider_code(provider_name: str) -> str:
@@ -56,12 +62,18 @@ def generate_reference(prefix: str = "PSK") -> str:
 
 
 def _headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    secret = _secret_key()
     if not is_configured():
         raise PaystackError("PAYSTACK_SECRET_KEY is not set.")
 
     base = {
-        "Authorization": f"Bearer {SECRET_KEY}",
+        "Authorization": f"Bearer {secret}",
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": os.getenv(
+            "PAYSTACK_USER_AGENT",
+            "POS-System/1.0 (+https://github.com/cLLeB/pos)"
+        ),
     }
     if extra:
         base.update(extra)
@@ -188,11 +200,12 @@ def verify_transaction(reference: str) -> dict[str, Any]:
 
 def verify_webhook_signature(raw_body: bytes, provided_signature: str) -> bool:
     """Validate X-Paystack-Signature using HMAC-SHA512."""
+    secret = _secret_key()
     if not is_configured() or not provided_signature:
         return False
 
     expected = hmac.new(
-        SECRET_KEY.encode("utf-8"),
+        secret.encode("utf-8"),
         raw_body,
         hashlib.sha512,
     ).hexdigest()
