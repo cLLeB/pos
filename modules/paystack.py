@@ -72,7 +72,7 @@ def _headers(extra: dict[str, str] | None = None) -> dict[str, str]:
         "Accept": "application/json",
         "User-Agent": os.getenv(
             "PAYSTACK_USER_AGENT",
-            "POS-System/1.0 (+https://github.com/cLLeB/pos)"
+            "MyPOSApp-Ghana/1.0"
         ),
     }
     if extra:
@@ -121,11 +121,30 @@ def _is_temporary_verify_message(message: str) -> bool:
         "still processing",
         "processing",
         "pending",
+        "otp",
+        "voucher",
+        "verification code",
+        "enter code",
         "try again",
         "timeout",
         "temporar",
     )
     return any(marker in text for marker in pending_markers)
+
+
+def _looks_like_code_challenge(message: str) -> bool:
+    """Return True when provider message suggests OTP/voucher code input is required."""
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+    markers = (
+        "otp",
+        "voucher",
+        "verification code",
+        "enter code",
+        "submit code",
+    )
+    return any(marker in text for marker in markers)
 
 
 def charge_mobile_money(
@@ -206,6 +225,7 @@ def charge_mobile_money_detailed(
     data = result.get("data", {})
     status = (data.get("status") or "").lower()
     display_text = data.get("display_text") or result.get("message") or "Request sent."
+    text_challenge = _looks_like_code_challenge(display_text)
 
     challenge_type = "none"
     if status == "send_otp":
@@ -214,6 +234,8 @@ def charge_mobile_money_detailed(
         challenge_type = "phone"
     elif status == "open_url":
         challenge_type = "url"
+    elif text_challenge:
+        challenge_type = "otp"
 
     accepted_statuses = {"pending", "send_otp", "send_phone", "open_url", "pay_offline", "success"}
     if status in accepted_statuses:
@@ -221,7 +243,7 @@ def charge_mobile_money_detailed(
             "ok": True,
             "message": display_text,
             "status": status,
-            "challenge_required": challenge_type in {"otp", "phone", "url"},
+            "challenge_required": challenge_type in {"otp", "phone", "url"} or text_challenge,
             "challenge_type": challenge_type,
             "raw": data,
         }
@@ -311,10 +333,18 @@ def verify_transaction(reference: str) -> dict[str, Any]:
             "raw": data,
         }
     if paystack_status in {"failed", "abandoned", "reversed"}:
+        failed_reason = data.get("gateway_response", "Payment failed.")
+        if _looks_like_code_challenge(failed_reason):
+            return {
+                "success": False,
+                "status": "PENDING",
+                "reason": failed_reason,
+                "raw": data,
+            }
         return {
             "success": False,
             "status": "FAILED",
-            "reason": data.get("gateway_response", "Payment failed."),
+            "reason": failed_reason,
             "raw": data,
         }
 

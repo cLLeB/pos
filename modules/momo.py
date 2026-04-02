@@ -637,14 +637,14 @@ def submit_momo_challenge_code(txn_id: str, code: str) -> tuple[bool, str, str]:
     if current_status in ("SUCCESS", "FAILED", "EXPIRED"):
         return True, current_status, "Transaction already finalized."
 
-    challenge = get_pending_momo_challenge(txn_id)
-    if not challenge:
-        return False, "UNKNOWN", "No pending challenge code is required for this transaction."
+    challenge = get_pending_momo_challenge(txn_id) or {}
 
     reference = challenge.get("reference") or txn.get("reference") or ""
+    if not reference:
+        return False, "UNKNOWN", "Transaction reference is missing."
     challenge_type = (challenge.get("challenge_type") or "otp").lower()
     if challenge_type not in {"otp", "phone"}:
-        return False, "UNKNOWN", f"Unsupported challenge type: {challenge_type}"
+        challenge_type = "otp"
 
     try:
         ok_submit, submit_msg, _ = paystack.submit_charge_challenge(

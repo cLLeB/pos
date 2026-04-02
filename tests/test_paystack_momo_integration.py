@@ -150,6 +150,22 @@ class TestPaystackVerifyNormalization(PosTestCase):
         finally:
             paystack._request_json = original_request
 
+    def test_verify_failed_with_otp_message_is_pending(self):
+        original_request = paystack._request_json
+        try:
+            paystack._request_json = lambda method, path, payload=None: {
+                "status": True,
+                "data": {
+                    "status": "failed",
+                    "gateway_response": "Enter OTP code to complete this transaction",
+                },
+            }
+            result = paystack.verify_transaction("REF-OTP-FAILED")
+            self.assertEqual(result["status"], "PENDING")
+            self.assertIn("OTP", result["reason"])
+        finally:
+            paystack._request_json = original_request
+
 
 class TestManualRetryVerification(PosTestCase):
     def test_retry_verification_pending_keeps_transaction_open(self):
@@ -279,7 +295,7 @@ class TestTelecelChallengeSubmission(PosTestCase):
             paystack.submit_charge_challenge = original_submit
             paystack.verify_transaction = original_verify
 
-    def test_submit_momo_challenge_code_without_pending_context_fails(self):
+    def test_submit_momo_challenge_code_without_pending_context_uses_fallback(self):
         txn_id = create_momo_transaction(
             sale_id="",
             phone="+233200000007",
@@ -287,7 +303,19 @@ class TestTelecelChallengeSubmission(PosTestCase):
             provider="Telecel Cash",
         )
 
-        ok, status, msg = submit_momo_challenge_code(txn_id, "123456")
-        self.assertFalse(ok)
-        self.assertEqual(status, "UNKNOWN")
-        self.assertIn("No pending challenge", msg)
+        original_submit = paystack.submit_charge_challenge
+        original_verify = paystack.verify_transaction
+        try:
+            paystack.submit_charge_challenge = lambda **kwargs: (True, "Code accepted", {})
+            paystack.verify_transaction = lambda reference: {
+                "status": "PENDING",
+                "reason": "Awaiting final confirmation",
+            }
+
+            ok, status, msg = submit_momo_challenge_code(txn_id, "123456")
+            self.assertTrue(ok)
+            self.assertEqual(status, "PENDING")
+            self.assertIn("Awaiting", msg)
+        finally:
+            paystack.submit_charge_challenge = original_submit
+            paystack.verify_transaction = original_verify

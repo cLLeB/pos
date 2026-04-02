@@ -408,6 +408,12 @@ class PaymentDialog(tk.Toplevel):
         else:
             self._hide_momo_code_entry()
 
+    def _message_requires_momo_code(self, message: str) -> bool:
+        text = (message or "").strip().lower()
+        if not text:
+            return False
+        return any(marker in text for marker in ("otp", "voucher", "verification code", "enter code", "submit code"))
+
     def _show_momo_code_entry(self, *, challenge_type: str = "otp", message: str = "", enable_submit: bool = True):
         label = "Telecel Voucher / OTP Code" if challenge_type == "otp" else "Challenge Value"
         self._momo_code_label_var.set(label)
@@ -776,6 +782,12 @@ class PaymentDialog(tk.Toplevel):
                 message=(challenge.get("message") or ""),
                 enable_submit=True,
             )
+        elif self._message_requires_momo_code(instruction):
+            self._show_momo_code_entry(
+                challenge_type="otp",
+                message=instruction,
+                enable_submit=True,
+            )
         else:
             self._on_mobile_provider_changed()
 
@@ -878,12 +890,19 @@ class PaymentDialog(tk.Toplevel):
         self._momo_status_var.set(
             "\u23f3 Payment still pending.\n"
             f"{message}\n"
-            (
+            + (
                 "For Telecel: enter voucher/OTP in POS and submit."
                 if self._momo_provider_name == "Telecel Cash"
                 else "Customer should complete the prompt on their phone."
             )
         )
+
+        if self._message_requires_momo_code(message):
+            self._show_momo_code_entry(
+                challenge_type="otp",
+                message=message,
+                enable_submit=True,
+            )
 
     def _confirm_card(self):
         card_type = self.card_type_var.get()
