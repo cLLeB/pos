@@ -755,11 +755,13 @@ def retry_verify_momo_transaction(txn_id: str) -> tuple[bool, str, str]:
     reference = txn.get("reference") or ""
 
     try:
-        if isinstance(provider, PaystackMoMoProvider):
+        # Prefer Paystack verify whenever available because it has richer
+        # challenge/OTP normalization than generic provider.check_status().
+        try:
             result = paystack.verify_transaction(reference)
             status = (result.get("status") or "PENDING").upper()
             reason = result.get("reason") or ""
-        else:
+        except Exception:
             status = (provider.check_status(reference) or "PENDING").upper()
             reason = ""
     except Exception as e:
@@ -769,4 +771,6 @@ def retry_verify_momo_transaction(txn_id: str) -> tuple[bool, str, str]:
         handle_payment_callback(reference, status, reason)
         return True, status, reason
 
-    return True, "PENDING", reason or "Still awaiting customer confirmation."
+    challenge = get_pending_momo_challenge(txn_id) or {}
+    fallback_reason = challenge.get("message") or "Still awaiting customer confirmation."
+    return True, "PENDING", reason or fallback_reason
