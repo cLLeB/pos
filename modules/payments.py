@@ -8,8 +8,12 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.db_setup import get_connection
+from database.db_setup import get_connection, get_setting
 from utils.helpers import current_timestamp
+
+
+def _currency_symbol() -> str:
+    return get_setting("currency_symbol") or "₵"
 
 
 # ── Payment processors ────────────────────────────────────────────────────────
@@ -21,10 +25,11 @@ def process_cash_payment(sale_id: str, amount_paid: float,
 
     Returns (success, message, change_given).
     """
+    cur = _currency_symbol()
     if amount_paid < total:
         return False, (
-            f"Insufficient cash. Total is ${total:.2f} "
-            f"but only ${amount_paid:.2f} was tendered."
+            f"Insufficient cash. Total is {cur}{total:.2f} "
+            f"but only {cur}{amount_paid:.2f} was tendered."
         ), 0.0
 
     change = round(amount_paid - total, 2)
@@ -41,7 +46,7 @@ def process_cash_payment(sale_id: str, amount_paid: float,
     if not ok:
         return False, msg, 0.0
 
-    return True, f"Cash payment accepted. Change: ${change:.2f}.", change
+    return True, f"Cash payment accepted. Change: {cur}{change:.2f}.", change
 
 
 def process_mobile_payment(sale_id: str, amount: float,

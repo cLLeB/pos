@@ -152,8 +152,9 @@ class ReturnsUI:
             command=self._confirm_return
         ).pack(side="right", padx=15)
 
+        currency = get_setting("currency_symbol") or "₵"
         self._total_lbl = tk.Label(
-            af, text="Refund: $0.00",
+            af, text=f"Refund: {currency}0.00",
             bg=COLORS["panel"], fg=COLORS["accent"],
             font=("Helvetica", 12, "bold")
         )
@@ -408,4 +409,5 @@ class ReturnsUI:
             text="Enter a Sale ID above to begin. Double-click a row to set return quantity.",
             fg=COLORS["muted"], font=("Helvetica", 10)
         )
-        self._total_lbl.config(text="Refund: $0.00")
+        currency = get_setting("currency_symbol") or "₵"
+        self._total_lbl.config(text=f"Refund: {currency}0.00")

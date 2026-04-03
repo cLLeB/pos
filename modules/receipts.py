@@ -61,7 +61,7 @@ def generate_receipt(sale_id: str) -> dict:
 
     conn.close()
 
-    # Loyalty points earned this sale (1 per $10)
+    # Loyalty points earned this sale (1 per 10 currency units)
     points_earned = int(sale["total_amount"] // 10) if sale["customer_id"] else 0
 
     return {

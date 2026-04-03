@@ -356,7 +356,8 @@ class AddEditProductDialog(tk.Toplevel):
 
         left2 = tk.Frame(row2, bg=COLORS["bg"])
         left2.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        tk.Label(left2, text="Price ($) *", font=("Segoe UI", 9),
+        _cur = get_setting("currency_symbol") or "₵"
+        tk.Label(left2, text=f"Price ({_cur}) *", font=("Segoe UI", 9),
                  bg=COLORS["bg"], fg=COLORS["muted"]).pack(anchor="w", pady=(0, 2))
         tk.Entry(left2, textvariable=self.price_var,
                  font=("Segoe UI", 11), bg=COLORS["accent"],

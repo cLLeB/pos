@@ -7,7 +7,11 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.db_setup import get_connection
+from database.db_setup import get_connection, get_setting
+
+
+def _currency_symbol() -> str:
+    return get_setting("currency_symbol") or "₵"
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -203,7 +207,7 @@ def get_customer_stats(customer_id: int) -> dict:
 
 def add_loyalty_points(customer_id: int, sale_total: float) -> int:
     """
-    Award 1 point per $10 spent (called automatically by sales module).
+    Award 1 point per 10 currency units spent (called automatically by sales module).
     Returns the number of points awarded.
     """
     points = int(sale_total // 10)
@@ -223,7 +227,7 @@ def redeem_loyalty_points(customer_id: int,
                           points_to_redeem: int) -> tuple[bool, str, float]:
     """
     Redeem loyalty points as a discount.
-    Rate: 1 point = $0.10 discount.
+    Rate: 1 point = 0.10 in the configured currency.
     Returns (success, message, discount_amount).
     """
     customer = get_customer_by_id(customer_id)
@@ -249,8 +253,9 @@ def redeem_loyalty_points(customer_id: int,
     conn.commit()
     conn.close()
 
+    cur = _currency_symbol()
     return True, (
-        f"{points_to_redeem} point(s) redeemed for ${discount:.2f} discount."
+        f"{points_to_redeem} point(s) redeemed for {cur}{discount:.2f} discount."
     ), discount
 
 

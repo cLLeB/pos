@@ -124,7 +124,7 @@
   Module 6 — Customer Management (modules/customers.py, ui/customer_ui.py)
     Register customer profiles (name, phone, email, address).
     Link customers to sales for purchase history tracking.
-    Loyalty points: earn 1 point per $10 spent; redeem 1 point = $0.10 off.
+  Loyalty points: earn 1 point per ₵10 spent; redeem 1 point = ₵0.10 off.
     Walk-in sales require no customer selection.
 
   Module 7 — Receipt Generation (modules/receipts.py, ui/receipt_window.py)
@@ -310,8 +310,8 @@
 
   - Transaction IDs: UUID4-based, prefixed "TXN-" (e.g. TXN-A1B2C3D4).
 
-  - Loyalty points: 1 point per $10 spent (rounded down). Redemption rate:
-    1 point = $0.10 discount applied before tax.
+  - Loyalty points: 1 point per ₵10 spent (rounded down). Redemption rate:
+    1 point = ₵0.10 discount applied before tax.
 
   - Session timeout: 30 minutes of mouse/keyboard inactivity triggers
     automatic logout on both the admin dashboard and the cashier screen.

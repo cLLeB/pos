@@ -310,7 +310,7 @@ class CashierScreen(SafeAfterMixin):
         tk.Frame(right, bg=COLORS["accent"], height=1).pack(fill="x", padx=16, pady=10)
 
         # Discount input
-        tk.Label(right, text="Discount ($)",
+        tk.Label(right, text=f"Discount ({self._cur})",
                  font=("Segoe UI", 8),
                  bg=COLORS["panel"], fg=COLORS["muted"]).pack(anchor="w", padx=16)
 
@@ -433,7 +433,7 @@ class CashierScreen(SafeAfterMixin):
             stock_tag = " [LOW]" if 0 < stock <= 5 else (" [OUT]" if stock == 0 else "")
             self.results_list.insert(
                 "end",
-                f"  {p['product_name']}  —  ${p['price']:.2f}  (stock: {stock}{stock_tag})"
+                f"  {p['product_name']}  —  {self._cur}{p['price']:.2f}  (stock: {stock}{stock_tag})"
             )
 
     def _add_from_search(self):

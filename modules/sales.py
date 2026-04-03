@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database.db_setup import get_connection
+from database.db_setup import get_connection, get_setting
 from utils.helpers import generate_transaction_id, current_timestamp, calculate_total
 from modules.inventory import deduct_stock_for_sale
 
@@ -102,8 +102,9 @@ def create_sale(
     # ── Audit log ─────────────────────────────────────────────────────────
     try:
         from modules.backup import log_action
+        cur = get_setting("currency_symbol") or "₵"
         log_action(user_id, "SALE",
-                   f"{sale_id} | {len(cart_items)} items | ${totals['total']:.2f} | {payment_method}")
+                   f"{sale_id} | {len(cart_items)} items | {cur}{totals['total']:.2f} | {payment_method}")
     except Exception:
         pass  # Audit failure must never block a completed sale
 
@@ -243,7 +244,7 @@ def get_daily_summary(date_str: str) -> dict:
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _award_loyalty_points(customer_id: int, sale_total: float):
-    """Award 1 loyalty point for every $10 spent (truncated)."""
+    """Award 1 loyalty point for every 10 currency units spent (truncated)."""
     points = int(sale_total // 10)
     if points > 0:
         conn = get_connection()

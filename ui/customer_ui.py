@@ -205,10 +205,11 @@ class CustomerUI:
             messagebox.showinfo("No Points",
                 f"{c['name']} has no loyalty points to redeem.")
             return
+        _cur = get_setting("currency_symbol") or "₵"
         pts = simpledialog.askinteger(
             "Redeem Points",
             f"{c['name']} has {c['loyalty_points']} point(s).\n"
-            f"1 point = $0.10 discount.\n\nPoints to redeem:",
+            f"1 point = {_cur}0.10 discount.\n\nPoints to redeem:",
             minvalue=1, maxvalue=c["loyalty_points"]
         )
         if not pts:
@@ -530,11 +531,12 @@ class CustomerSelectDialog(tk.Toplevel):
             return
         c = self._customers[sel[0]]
         stats = cust_mod.get_customer_stats(c["customer_id"])
+        _cur = get_setting("currency_symbol") or "₵"
         self.detail_var.set(
             f"{c['name']}  |  Phone: {c['phone'] or '—'}  |  "
             f"Email: {c['email'] or '—'}  |  "
             f"Visits: {stats['visits']}  |  "
-            f"Total spent: ${stats['total_spend']:.2f}  |  "
+            f"Total spent: {_cur}{stats['total_spend']:.2f}  |  "
             f"Points: {c['loyalty_points']}"
         )
 

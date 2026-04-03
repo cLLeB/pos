@@ -90,7 +90,7 @@ class SettingsUI(tk.Frame):
 
         self._build_section("Financial Settings", [
             ("Currency Symbol", "currency_symbol",
-             "Symbol prepended to all prices (e.g. $, £, ₵, KES)."),
+           "Symbol prepended to all prices (e.g. ₵, £, KES, €)."),
             ("Tax Rate (%)",    "tax_rate",
              "Percentage applied to every sale total (e.g. 16 for 16%)."),
         ])
